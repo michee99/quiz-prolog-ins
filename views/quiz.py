@@ -1,10 +1,8 @@
-"""views/quiz.py — Moteur du quiz avec design premium."""
+"""views/quiz.py — Une question à la fois avec explication immédiate."""
 import time
 import streamlit as st
 from utils.quiz_logic  import remaining_seconds, format_timer, is_warning_zone, calculate_score
 from utils.database    import save_result
-
-PAGE_SIZE = 10
 
 
 def render(render_header):
@@ -12,103 +10,125 @@ def render(render_header):
     questions = st.session_state.questions
     lang      = agent["langue"]
 
-    # Labels bilingues
     LBL = {
-        "progress" : "Questions répondues" if lang=="FR" else "Questions answered",
-        "prev"     : "← Précédent"         if lang=="FR" else "← Previous",
-        "next"     : "Suivant →"            if lang=="FR" else "Next →",
-        "submit"   : "✅ Soumettre mes réponses" if lang=="FR" else "✅ Submit my answers",
-        "unanswered": lambda n: f"⚠️ {n} question(s) sans réponse." if lang=="FR"
-                                else f"⚠️ {n} question(s) unanswered.",
-        "time_up"  : "⏰ Temps écoulé — soumission automatique !" if lang=="FR"
-                     else "⏰ Time's up — auto-submitted!",
-        "page_lbl" : lambda c,t: f"Page {c} / {t}",
+        "submit"  : "✅ Soumettre mes réponses" if lang=="FR" else "✅ Submit my answers",
+        "next"    : "Question suivante →"        if lang=="FR" else "Next question →",
+        "finish"  : "🏁 Voir mes résultats"      if lang=="FR" else "🏁 View my results",
+        "time_up" : "⏰ Temps écoulé !"           if lang=="FR" else "⏰ Time's up!",
+        "choose"  : "Choisissez une réponse"     if lang=="FR" else "Choose an answer",
+        "correct" : "✅ Bonne réponse !"          if lang=="FR" else "✅ Correct!",
+        "wrong"   : "❌ Mauvaise réponse"         if lang=="FR" else "❌ Wrong answer",
+        "answer"  : "La bonne réponse était"     if lang=="FR" else "The correct answer was",
+        "expl"    : "💡 Explication"              if lang=="FR" else "💡 Explanation",
+        "progress": "Question"                   if lang=="FR" else "Question",
     }
 
     # Chronomètre
-    secs  = remaining_seconds(st.session_state.start_time)
+    secs = remaining_seconds(st.session_state.start_time)
     if secs <= 0 and not st.session_state.submitted:
-        _submit(agent, questions, 60*60)
+        _submit(agent, questions, 60 * 60)
         return
 
-    # ── Header ────────────────────────────────────────────────────────────
-    render_header(f"{agent['nom']} · {agent['region']} · {agent['code']}")
+    render_header(f"{agent['nom']} · {agent['region']}")
 
-    # ── Timer ─────────────────────────────────────────────────────────────
+    # Timer
     cls = "timer-warning" if is_warning_zone(secs) else "timer-normal"
-    st.markdown(f'<div class="{cls}">⏱ {format_timer(secs)}</div>', unsafe_allow_html=True)
-
-    # ── Progression ───────────────────────────────────────────────────────
-    total    = len(questions)
-    answered = sum(1 for v in st.session_state.answers.values() if v)
-    st.markdown(f'<p class="progress-label">{LBL["progress"]} : {answered} / {total}</p>',
+    st.markdown(f'<div class="{cls}">⏱ {format_timer(secs)}</div>',
                 unsafe_allow_html=True)
-    st.progress(answered / total)
 
-    # ── Questions (page courante) ─────────────────────────────────────────
-    n_pages  = (total + PAGE_SIZE - 1) // PAGE_SIZE
-    page_idx = st.session_state.get("quiz_page", 0)
-    start    = page_idx * PAGE_SIZE
-    end      = min(start + PAGE_SIZE, total)
+    # Progression
+    total   = len(questions)
+    current = st.session_state.get("quiz_page", 0)
 
-    for gi, q in enumerate(questions[start:end], start=start):
-        opts    = [f"{k}  —  {q[k]}" for k in ("A","B","C","D")]
-        current = st.session_state.answers.get(gi)
-        idx     = ("ABCD".index(current)) if current and current in "ABCD" else None
+    st.markdown(
+        f'<p class="progress-label">{LBL["progress"]} '
+        f'<strong>{current + 1}</strong> / {total}</p>',
+        unsafe_allow_html=True,
+    )
+    st.progress((current + 1) / total)
 
-        st.markdown(f"""
-        <div class="question-card">
-            <div class="question-number">{gi+1}</div>
-            <div class="question-text">{q['question']}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    # Question courante
+    q        = questions[current]
+    answered = st.session_state.answers.get(current)
 
-        choice = st.radio(
-            f"_q{gi}", opts,
-            index=idx, key=f"r_{gi}",
-            label_visibility="collapsed",
-            disabled=st.session_state.submitted,
-        )
+    st.markdown(f"""
+    <div class="question-card">
+        <div class="question-number">{current + 1}</div>
+        <div class="question-text">{q['question']}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Options
+    if not answered:
+        opts   = [f"{k}  —  {q[k]}" for k in ("A", "B", "C", "D")]
+        choice = st.radio(LBL["choose"], opts,
+                          index=None, key=f"r_{current}",
+                          label_visibility="collapsed")
         if choice:
-            st.session_state.answers[gi] = choice[0]
+            st.session_state.answers[current] = choice[0]
+            st.rerun()
 
-        # Explication après réponse
-        if current and st.session_state.submitted:
-            ok = (current == q["correct"])
-            icon = "✅" if ok else f"❌ (correct : {q['correct']} — {q[q['correct']]})"
+    # Après réponse : feedback immédiat
+    else:
+        ok = (answered == q["correct"])
+
+        for letter in ("A", "B", "C", "D"):
+            if letter == q["correct"]:
+                bg     = "#dcfce7"
+                border = "#22c55e"
+                icon   = "✅"
+            elif letter == answered and not ok:
+                bg     = "#fee2e2"
+                border = "#ef4444"
+                icon   = "❌"
+            else:
+                bg     = "#f8fafc"
+                border = "#cbd5e1"
+                icon   = ""
+
             st.markdown(f"""
-            <div class="explanation-box">
-                <strong>💡 {icon}</strong><br>{q['explication']}
+            <div style="
+                background:{bg}; border:2px solid {border};
+                border-radius:14px; padding:1rem 1.4rem;
+                margin-bottom:0.5rem; font-size:0.97rem;
+                font-weight:500; display:flex; align-items:center; gap:0.8rem;">
+                <span style="font-weight:700; min-width:24px;">{letter}</span>
+                {q[letter]}
+                <span style="margin-left:auto;">{icon}</span>
             </div>
             """, unsafe_allow_html=True)
 
-    # ── Navigation ────────────────────────────────────────────────────────
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c1:
-        if page_idx > 0:
-            if st.button(LBL["prev"]):
-                st.session_state.quiz_page -= 1
-                st.rerun()
-    with c2:
-        st.markdown(f'<p style="text-align:center;color:#64748b;margin:8px 0;">'
-                    f'{LBL["page_lbl"](page_idx+1, n_pages)}</p>', unsafe_allow_html=True)
-    with c3:
-        if page_idx < n_pages - 1:
-            if st.button(LBL["next"]):
+        # Explication
+        if ok:
+            st.markdown(f"""
+            <div class="explanation-box" style="border-left-color:#22c55e;">
+                <strong>{LBL['correct']}</strong><br>
+                {LBL['expl']} : {q['explication']}
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="explanation-box">
+                <strong>{LBL['wrong']}</strong> —
+                {LBL['answer']} : <strong>{q['correct']} — {q[q['correct']]}</strong><br>
+                {LBL['expl']} : {q['explication']}
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.write("")
+
+        # Navigation
+        if current < total - 1:
+            if st.button(LBL["next"], use_container_width=True, type="primary"):
                 st.session_state.quiz_page += 1
                 st.rerun()
-
-    # ── Soumission ────────────────────────────────────────────────────────
-    if not st.session_state.submitted:
-        st.markdown("---")
-        unanswered = total - answered
-        if unanswered > 0:
-            st.info(LBL["unanswered"](unanswered))
-        if st.button(LBL["submit"], use_container_width=True, type="primary"):
-            _submit(agent, questions, time.time() - st.session_state.start_time)
+        else:
+            if st.button(LBL["finish"], use_container_width=True, type="primary"):
+                _submit(agent, questions,
+                        time.time() - st.session_state.start_time)
 
     # Rafraîchissement timer
-    if not st.session_state.submitted:
+    if not answered:
         time.sleep(0.8)
         st.rerun()
 
