@@ -313,11 +313,11 @@ def render_header(subtitle="Certification Agent Collecteur"):
     <div class="header-container">
         <div class="logo-wrapper">
             <img src="https://raw.githubusercontent.com/michee99/quiz-prolog-ins/master/assets/logo_ins.png" class="logo-img">
-            <div class="connector-text">
+            <div class="connector-text" style="flex:1; text-align:center;">
                 <div class="connector-title">Partenariat Stratégique</div>
                 <div class="connector-desc">MINDDEVEL · Banque Mondiale</div>
             </div>
-            <<img src="https://raw.githubusercontent.com/michee99/quiz-prolog-ins/master/assets/logo_prolog.png" class="logo-img">
+            <img src="https://raw.githubusercontent.com/michee99/quiz-prolog-ins/master/assets/logo_prolog.png" class="logo-img">
         </div>
         <h1 class="header-title">Quiz PROLOG</h1>
         <p class="header-subtitle">{subtitle}</p>
